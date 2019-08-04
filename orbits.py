@@ -146,22 +146,25 @@ class Planet:
                 p2.destroyed = True
 
     @staticmethod
-    def in_orbit(name, radius, mass, color, angle=None, days_per_frame=5):
+    def in_orbit_of(parent, name, radius, mass, color, angle=None, days_per_frame=5):
         if angle is None:
             angle = random.uniform(0, 2*math.pi)
 
         pos = Point(radius * math.cos(angle), radius * math.sin(angle))
         direction = pos.perpendicular().normalized()
-        speed = math.sqrt(G) * math.sqrt(1.989e30) / math.sqrt(radius)
+        speed = math.sqrt(G) * math.sqrt(parent.mass) / math.sqrt(radius)
 
         orbital_period = 365 * (radius / 1.496e11)**(3/2)
-        orbital_period = min(365, orbital_period)
+        orbital_period = max(min(365, orbital_period), 60)
         trail_length = int(0.8 * (orbital_period / days_per_frame))
+
+        pos = pos + parent.pos
+        vel = speed * direction + parent.vel
 
         return Planet(
             name,
             pos,
-            speed * direction,
+            vel,
             mass,
             color,
             trail_length
@@ -199,7 +202,7 @@ def update_planets(planets, center_on='sun', delta=1):
         p.pos = p.pos - sun_pos
         p.vel = p.vel - sun_vel
 
-        if p.destroyed:
+        if p.destroyed and p.name != 'moon':
             deleted.append(k)
 
     for k in deleted:
@@ -215,6 +218,7 @@ def plot_planets(fig, planets, args, frame_i, day):
         plt.plot(p.x_trail, p.y_trail, c=p.color, alpha=0.8)
 
     lim = 1.0 * 1.434e12
+    #lim = 1.6e9  # for moon visualization
     plt.xlim((-lim, lim))
     plt.ylim((-lim, lim))
 
@@ -247,46 +251,60 @@ def initialize_planets(args):
         mass=1.989e30,
         color='yellow'
     )
-    planets['mercury'] = Planet.in_orbit(
+    planets['mercury'] = Planet.in_orbit_of(
+        planets['sun'],
         'mercury',
         radius=57.91e9,
         mass=3.285e23,
         color='gray',
         days_per_frame=args.days_per_frame
     )
-    planets['venus'] = Planet.in_orbit(
+    planets['venus'] = Planet.in_orbit_of(
+        planets['sun'],
         'venus',
         radius=108.2e9,
         mass=4.867e24,
         color='white',
         days_per_frame=args.days_per_frame
     )
-    planets['earth'] = Planet.in_orbit(
+    planets['earth'] = Planet.in_orbit_of(
+        planets['sun'],
         'earth',
         radius=149.6e9,
         mass=5.972e24,
         color='c',
         days_per_frame=args.days_per_frame
     )
-    planets['mars'] = Planet.in_orbit(
+    planets['mars'] = Planet.in_orbit_of(
+        planets['sun'],
         'mars',
         radius=227.9e9,
         mass=6.39e23,
         color='r',
         days_per_frame=args.days_per_frame
     )
-    planets['jupiter'] = Planet.in_orbit(
+    planets['jupiter'] = Planet.in_orbit_of(
+        planets['sun'],
         'jupiter',
         radius=778.5e9,
         mass=1.898e27,
         color='brown',
         days_per_frame=args.days_per_frame
     )
-    planets['saturn'] = Planet.in_orbit(
+    planets['saturn'] = Planet.in_orbit_of(
+        planets['sun'],
         'saturn',
         radius=1.434e12,
         mass=5.68e26,
         color='yellow',
+        days_per_frame=args.days_per_frame
+    )
+    planets['moon'] = Planet.in_orbit_of(
+        planets['earth'],
+        'moon',
+        radius=3.8e8,
+        mass=7.35e22,
+        color='white',
         days_per_frame=args.days_per_frame
     )
     '''
@@ -340,7 +358,8 @@ if __name__ == '__main__':
     directory = os.path.join('frames', args.directory)
     os.makedirs(directory, exist_ok=True)
 
-    frame = simulate(args, center_on='sun')
+    #frame = simulate(args, center_on='sun')
+    frame = 0
     simulate(args, center_on='rogue', initial_frame=frame)
 
     

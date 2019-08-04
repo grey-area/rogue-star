@@ -1,4 +1,3 @@
-from collections import namedtuple, deque
 from itertools import combinations
 import random
 import math
@@ -6,185 +5,31 @@ import argparse
 import os
 import time
 from tqdm import tqdm
+from planets import Point, Planet
 import matplotlib.pyplot as plt
 
 
 plt.style.use('dark_background')
 
-G = 6.674e-11
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    '--solar-mass',
-    type=float,
-    default=1.0
-)
-parser.add_argument(
-    '--days-per-frame',
-    type=int,
-    default=5
-)
-parser.add_argument(
-    '--seed',
-    type=int,
-    default=12345
-)
-args = parser.parse_args()
-
-
-class Point:
-    def __init__(self, x=0., y=0.):
-        self.x = x
-        self.y = y
-
-    def __add__(self, other):
-        return Point(
-            self.x + other.x,
-            self.y + other.y
-        )
-
-    def __sub__(self, other):
-        return Point(
-            self.x - other.x,
-            self.y - other.y
-        )
-
-    def __mul__(self, c):
-        return Point(
-            c * self.x,
-            c * self.y
-        )
-
-    def __rmul__(self, c):
-        return Point(
-            c * self.x,
-            c * self.y
-        )
-
-    def __truediv__(self, c):
-        return Point(
-            self.x / c,
-            self.y / c
-        )
-
-    def __neg__(self):
-        return Point(
-            -self.x,
-            -self.y
-        )
-
-    def __str__(self):
-        return f'Point({self.x:.02e}, {self.y:.02e})'
-
-    def copy(self):
-        return Point(self.x, self.y)
-
-    @property
-    def norm(self):
-        return math.sqrt(self.x**2 + self.y**2)
-
-    def normalized(self):
-        return self / self.norm
-
-    def perpendicular(self):
-        return Point(
-            self.y,
-            -self.x
-        )
-
-min_observed = 1e20
-
-class Planet:
-    def __init__(self, name, pos, vel, mass, color, trail_length=0):
-        self.pos = pos
-        self.vel = vel
-        self.mass = mass
-        self.accel = Point(0., 0.)
-        self.name = name
-        self.color = color
-        self.trail_length = trail_length
-        self.x_trail = deque()
-        self.y_trail = deque()
-        self.destroyed = False
-
-    def update_planet(self, delta=1):
-        self.pos = self.pos + delta * self.vel
-        self.vel = self.vel + delta * self.accel
-        self.accel = Point(0., 0.)
-
-    def update_trail(self):
-        self.x_trail.append(self.pos.x)
-        self.y_trail.append(self.pos.y)
-
-        if len(self.x_trail) > self.trail_length:
-            self.x_trail.popleft()
-            self.y_trail.popleft()
-
-    @property
-    def x(self):
-        return self.pos.x
-
-    @property
-    def y(self):
-        return self.pos.y
-
-    @staticmethod
-    def compute_forces(p1, p2):
-        global min_observed
-        displace = p1.pos - p2.pos
-        r = displace.norm
-        direction = displace.normalized()
-
-        F = (G * p1.mass * p2.mass) / r**2
-        p1.accel = p1.accel - direction * F / p1.mass
-        p2.accel = p2.accel + direction * F / p2.mass
-
-        if r < 4e9:  # actual radius of the sun: 7e8
-            if p1.mass < p2.mass:
-                p1.destroyed = True
-            else:
-                p2.destroyed = True
-
-    @staticmethod
-    def in_orbit_of(parent, name, radius, mass, color, angle=None, days_per_frame=5):
-        if angle is None:
-            angle = random.uniform(0, 2*math.pi)
-
-        pos = Point(radius * math.cos(angle), radius * math.sin(angle))
-        direction = pos.perpendicular().normalized()
-        speed = math.sqrt(G) * math.sqrt(parent.mass) / math.sqrt(radius)
-
-        orbital_period = 365 * (radius / 1.496e11)**(3/2)
-        orbital_period = max(min(365, orbital_period), 60)
-        trail_length = int(0.8 * (orbital_period / days_per_frame))
-
-        pos = pos + parent.pos
-        vel = speed * direction + parent.vel
-
-        return Planet(
-            name,
-            pos,
-            vel,
-            mass,
-            color,
-            trail_length
-        )
-
-    @staticmethod
-    def produce_rogue(days_to_pass, solar_masses):
-        speed = 2e4
-        radius = speed * days_to_pass * 24 * 3600 + 778.5e9
-        y = 5 * 149.6e9
-        pos = Point(-radius, y)
-        vel = Point(speed, 0.)
-
-        return Planet(
-            'rogue',
-            pos,
-            vel,
-            1.989e30 * solar_masses,
-            'yellow'
-        )
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--solar-mass',
+        type=float,
+        default=1.0
+    )
+    parser.add_argument(
+        '--days-per-frame',
+        type=int,
+        default=5
+    )
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=12345
+    )
+    return parser.parse_args()
 
 
 def update_planets(planets, center_on='sun', delta=1):
@@ -198,12 +43,8 @@ def update_planets(planets, center_on='sun', delta=1):
     for k, p in planets.items():
         p.update_planet(delta)
 
-        # Keep sun-centric!
         p.pos = p.pos - sun_pos
         p.vel = p.vel - sun_vel
-
-        if p.destroyed and p.name != 'moon':
-            deleted.append(k)
 
     for k in deleted:
         del planets[k]
@@ -218,7 +59,7 @@ def plot_planets(fig, planets, args, frame_i, day):
         plt.plot(p.x_trail, p.y_trail, c=p.color, alpha=0.8)
 
     lim = 1.0 * 1.434e12
-    #lim = 1.6e9  # for moon visualization
+    #lim = 1.6e9  # for close-up moon visualization
     plt.xlim((-lim, lim))
     plt.ylim((-lim, lim))
 
@@ -226,7 +67,6 @@ def plot_planets(fig, planets, args, frame_i, day):
         0.6*lim,
         0.7*lim,
         f'Day {day:04d}'
-        #f'Day {day:04d}\n{args.solar_mass} solar masses'
     )
 
     plt.axis('off')
@@ -299,6 +139,7 @@ def initialize_planets(args):
         color='yellow',
         days_per_frame=args.days_per_frame
     )
+    '''
     planets['moon'] = Planet.in_orbit_of(
         planets['earth'],
         'moon',
@@ -308,23 +149,14 @@ def initialize_planets(args):
         days_per_frame=args.days_per_frame
     )
     '''
-    planets['uranus'] = Planet.in_orbit(
-        radius=2.871e12,
-        mass=8.681e25,
-    )
-    planets['neptune'] = Planet.in_orbit(
-        radius=4.495e12,
-        mass=1.024e26,
-    )
-    '''
 
     return planets
 
 def simulate(args, center_on='sun', initial_frame=0):
     random.seed(args.seed)
 
-    days_to_pass = 600  # 600
-    days = int(5 * days_to_pass)  # 5 *
+    days_to_pass = 600
+    days = int(5 * days_to_pass)
     days_elapsed = 0
     frame_i = initial_frame
 
@@ -353,12 +185,14 @@ def simulate(args, center_on='sun', initial_frame=0):
     return frame_i
 
 if __name__ == '__main__':
+    args = parse_args()
+
     time_str = f'{int(time.time())}'[-4:]
     args.directory = f'{time_str}_{args.solar_mass}_{args.seed}'
     directory = os.path.join('frames', args.directory)
     os.makedirs(directory, exist_ok=True)
 
-    #frame = simulate(args, center_on='sun')
+    frame = simulate(args, center_on='sun')
     frame = 0
     simulate(args, center_on='rogue', initial_frame=frame)
 
